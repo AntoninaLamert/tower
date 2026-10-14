@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#202d32">
+  <title>Башни под ударом — физическая аркада</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="vendor/matter.min.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/physics.js"></script>
+  <script defer src="js/audio.js"></script>
+  <script defer src="js/textures.js"></script>
+  <script defer src="js/particles.js"></script>
+  <script defer src="js/renderer.js"></script>
+  <script defer src="js/game.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><div><span class="eyebrow">ФИЗИЧЕСКАЯ АРКАДА</span><h1>Башни под ударом<span class="accent">.</span></h1></div></div>
+      <div class="stats"><div class="stat"><span>БАШНЯ</span><strong id="tower">01</strong></div><div class="stat score"><span>ОБЩИЙ СЧЁТ</span><strong id="score">0</strong></div></div>
+    </header>
+    <section class="mission" aria-label="Прогресс разрушения">
+      <div class="mission-label"><span class="indicator"></span><span id="status">Подготовка полигона</span></div>
+      <div class="progress-group"><div class="progress-caption"><span>Выведено из строя <b id="floors">0 / 0</b></span><strong id="percent">0%</strong></div><div class="progress" role="progressbar" aria-label="Разрушение башни" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div><i title="Цель: 70%"></i></div></div>
+      <div class="target"><span>ЦЕЛЬ</span><strong>70<span>%</span></strong></div>
+    </section>
+    <section class="field" id="field" aria-label="Игровое поле">
+      <canvas id="game" tabindex="0" aria-label="Пушка слева, башня справа. Зажмите кнопку мыши и ведите вправо-вверх для прицеливания, отпустите для выстрела."></canvas>
+      <div class="field-caption"><span>ИСПЫТАТЕЛЬНЫЙ ПОЛИГОН</span><span id="field-note">Шесть выстрелов. Одна цель.</span></div>
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
+      <div id="defeat" class="defeat" hidden><div><span class="eyebrow">БОЕКОМПЛЕКТ ИСЧЕРПАН</span><h2>Башня устояла</h2><p id="defeat-detail"></p><button id="restart">Начать заново <span aria-hidden="true">↗</span></button></div></div>
+      <div class="field-bottom"><span><i class="material-dot wood"></i>Дерево <i class="material-dot glass"></i>Стекло <i class="material-dot concrete"></i>Бетон</span><span id="aim-readout">ГОТОВО К ВЫСТРЕЛУ</span></div>
+    </section>
+    <footer class="controls">
+      <div class="ammo-section"><div class="eyebrow">БОЕКОМПЛЕКТ <span id="ammo-total">6 / 6</span></div><div class="ammo-list" role="group" aria-label="Тип ядра">
+        <button class="ammo selected" data-ammo="normal" aria-pressed="true"><kbd>1</kbd><i class="ball normal"></i><span>Обычное<small>Дерево и стекло</small></span><b id="ammo-normal">3</b></button>
+        <button class="ammo" data-ammo="heavy" aria-pressed="false"><kbd>2</kbd><i class="ball heavy"></i><span>Тяжёлое<small>Мощный импульс</small></span><b id="ammo-heavy">2</b></button>
+        <button class="ammo" data-ammo="explosive" aria-pressed="false"><kbd>3</kbd><i class="ball explosive"></i><span>Разрывное<small>Локальный взрыв</small></span><b id="ammo-explosive">1</b></button>
+      </div></div>
+      <div class="sound-panel"><button id="sound-toggle" class="sound-toggle" type="button" aria-pressed="true" aria-label="Выключить звук"><span class="sound-glyph" aria-hidden="true">◖</span><span id="sound-status">ЗВУК ВКЛ</span></button><label for="volume">ГРОМКОСТЬ</label><div class="volume-row"><input id="volume" type="range" min="0" max="100" value="68" aria-label="Общая громкость"><output id="volume-value" for="volume">68%</output></div></div>
+      <div class="instructions"><div><span class="mouse-icon" aria-hidden="true"></span><strong>Зажмите → ведите → отпустите</strong></div><p>Ведите вправо-вверх. Дальше — сильнее.<br><span class="key-help"><kbd>Esc</kbd> отмена <span>·</span> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> выбор ядра</span></p></div>
+    </footer>
+  </main>
+  <noscript>Для игры включите JavaScript в браузере.</noscript>
+</body>
+</html>
