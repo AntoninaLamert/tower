@@ -6,14 +6,16 @@
 
   // This module owns all Matter bodies. It emits facts, never score or round decisions.
   class Physics {
-    constructor(onFloor, onEffect) {
+    constructor(onFloor, onEffect, onDamage) {
       this.onFloor = onFloor;
       this.onEffect = onEffect;
+      this.onDamage = onDamage;
       this.engine = Engine.create({ enableSleeping: true, positionIterations: 10, velocityIterations: 8 });
       this.engine.gravity.y = 1;
       this.engine.gravity.scale = C.gravity;
       this.floors = [];
       this.projectiles = [];
+      this.barrels = [];
       this.pending = [];
       this.time = 0;
       this.armed = false;
@@ -47,6 +49,7 @@
         Body.setAngularVelocity(floor.body, 0);
         Sleeping.set(floor.body, false);
       }
+      this.createBarrels(number);
       return this.floors.length;
     }
 
@@ -55,6 +58,7 @@
       Engine.clear(this.engine);
       this.floors = [];
       this.projectiles = [];
+      this.barrels = [];
       const ground = Bodies.rectangle(C.width / 2, C.ground + 110, 6000, 220, {
         isStatic: true, friction: .8, restitution: .02, label: 'ground'
       });
@@ -155,15 +159,63 @@
       const spec = C.ammo[type];
       const position = this.muzzle(angle, type);
       const body = Bodies.circle(position.x, position.y, spec.radius, {
-        friction: .75, frictionStatic: 1, frictionAir: 0, restitution: .13, label: 'projectile', sleepThreshold: 70
+        friction: .75, frictionStatic: 1, frictionAir: 0, restitution: .13,
+        label: 'projectile', sleepThreshold: 70, collisionFilter: { category: 0x0002, mask: 0x0005 }
       });
       Body.setMass(body, spec.mass);
       Body.setVelocity(body, { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed });
-      const projectile = { body, type, radius: spec.radius, born: this.time, resting: 0, exploded: false, removed: false };
+      const projectile = { body, type, radius: spec.radius, born: this.time, resting: 0, exploded: false, removed: false, attached: null };
       body.plugin.projectile = projectile;
       this.projectiles.push(projectile);
       Composite.add(this.engine.world, body);
       this.wakeTower();
+    }
+
+    createBarrels(number) {
+      if (number % 3 === 0 || (number % 2 !== 0 && Math.random() > .3)) return;
+      const count = number >= 5 ? 2 : 1;
+      const choices = this.floors.slice(1, -1).filter(floor => floor.height >= 35);
+      for (let i = 0; i < count && choices.length; i++) {
+        const index = Math.floor(Math.random() * choices.length);
+        const floor = choices.splice(index, 1)[0];
+        // A sensor on an exposed end of the slab behaves like a barrel in a shallow recess.
+        const barrel = { floor, localX: -floor.width / 2 + 9, localY: 0, radius: 17, exploded: false };
+        const position = this.barrelPosition(barrel);
+        barrel.body = Bodies.circle(position.x, position.y, barrel.radius, {
+          isStatic: true, isSensor: true, label: 'barrel', collisionFilter: { category: 0x0004, mask: 0x0002 }
+        });
+        barrel.body.plugin.barrel = barrel;
+        this.barrels.push(barrel);
+        Composite.add(this.engine.world, barrel.body);
+      }
+    }
+
+    barrelPosition(barrel) {
+      const body = barrel.floor.body, cos = Math.cos(body.angle), sin = Math.sin(body.angle);
+      return { x: body.position.x + barrel.localX * cos - barrel.localY * sin,
+        y: body.position.y + barrel.localX * sin + barrel.localY * cos };
+    }
+
+    makeFragment(parent, angle, speed) {
+      const spec = C.ammo.fragment, p = parent.body.position;
+      const body = Bodies.circle(p.x + Math.cos(angle) * 17, p.y + Math.sin(angle) * 17, spec.radius, {
+        friction: .75, frictionStatic: 1, frictionAir: 0, restitution: .13,
+        label: 'projectile', sleepThreshold: 70, collisionFilter: { category: 0x0002, mask: 0x0005 }
+      });
+      Body.setMass(body, spec.mass);
+      Body.setVelocity(body, { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed });
+      const shot = { body, type: 'fragment', radius: spec.radius, born: this.time, resting: 0, exploded: false, removed: false, attached: null };
+      body.plugin.projectile = shot;
+      this.projectiles.push(shot);
+      Composite.add(this.engine.world, body);
+    }
+
+    splitProjectile(projectile) {
+      if (projectile.removed) return;
+      const v = projectile.body.velocity, heading = Math.atan2(v.y, v.x), speed = Math.max(12, Math.hypot(v.x, v.y));
+      for (const spread of [-.13, 0, .13]) this.makeFragment(projectile, heading + spread, speed * 1.06);
+      this.onEffect({ type: 'split', x: projectile.body.position.x, y: projectile.body.position.y });
+      this.removeProjectile(projectile);
     }
 
     wakeTower() {
@@ -197,7 +249,9 @@
     destroy(floor, reason, strength = 0) {
       if (floor.destroyed || floor.material === 'concrete') return;
       floor.destroyed = true;
+      const wasDisabled = floor.disabled;
       this.disableFloor(floor, reason);
+      if (wasDisabled) this.onFloor(floor, reason);
       this.onEffect({ type: 'break', x: floor.body.position.x, y: floor.body.position.y, width: floor.width, height: floor.height, angle: floor.body.angle, material: floor.material, mass: floor.body.mass, strength });
       Composite.remove(this.engine.world, floor.body);
       this.wakeTower();
@@ -205,14 +259,29 @@
 
     damageFloor(floor, amount, reason, speed) {
       if (floor.destroyed || floor.material === 'concrete' || amount <= 0) return;
+      const before = floor.damage;
       floor.damage += amount;
+      if (this.onDamage) this.onDamage(floor, floor.damage - before);
       if (floor.damage >= floor.maxHealth) this.destroy(floor, reason, speed);
     }
 
     explode(projectile, point) {
       if (projectile.exploded || projectile.removed) return;
       projectile.exploded = true;
-      const radius = this.averageHeight * 3;
+      this.blast(point, this.averageHeight * (projectile.type === 'sticky' ? 3.3 : 3),
+        projectile.type === 'sticky' ? 1450 : 1050);
+      this.removeProjectile(projectile);
+    }
+
+    detonateBarrel(barrel) {
+      if (barrel.exploded) return;
+      barrel.exploded = true;
+      const point = { x: barrel.body.position.x, y: barrel.body.position.y };
+      Composite.remove(this.engine.world, barrel.body);
+      this.blast(point, this.averageHeight * 2.1, 890);
+    }
+
+    blast(point, radius, force) {
       this.onEffect({ type: 'explosion', x: point.x, y: point.y, radius });
       this.wakeTower();
       for (const floor of this.floors) {
@@ -231,13 +300,31 @@
         const directionX = body.position.x - point.x;
         const directionY = body.position.y - point.y;
         const length = Math.max(1, Math.hypot(directionX, directionY));
-        const impulse = 1050 * attenuation * attenuation;
+        const impulse = force * attenuation * attenuation;
         const ix = directionX / length * impulse, iy = directionY / length * impulse;
         Body.setVelocity(body, { x: body.velocity.x + ix / body.mass, y: body.velocity.y + iy / body.mass });
         const contactX = cos * cx - sin * cy, contactY = sin * cx + cos * cy;
         Body.setAngularVelocity(body, body.angularVelocity + (contactX * iy - contactY * ix) / body.inertia);
       }
-      this.removeProjectile(projectile);
+      for (const barrel of this.barrels) {
+        if (!barrel.exploded && Math.hypot(barrel.body.position.x - point.x, barrel.body.position.y - point.y) < radius)
+          this.detonateBarrel(barrel);
+      }
+    }
+
+    attachSticky(projectile, other, point) {
+      if (projectile.attached || projectile.removed) return;
+      const floor = other.plugin.floor;
+      if (floor) {
+        const dx = point.x - other.position.x, dy = point.y - other.position.y;
+        const cos = Math.cos(other.angle), sin = Math.sin(other.angle);
+        projectile.attached = { floor, x: cos * dx + sin * dy, y: -sin * dx + cos * dy };
+      } else projectile.attached = { x: point.x, y: point.y };
+      Body.setStatic(projectile.body, true);
+      Body.setPosition(projectile.body, point);
+      projectile.body.collisionFilter.mask = 0;
+      projectile.fuse = this.time + 2;
+      this.onEffect({ type: 'attach', x: point.x, y: point.y });
     }
 
     processImpacts() {
@@ -255,7 +342,11 @@
         for (const [body, other] of [[a, b], [b, a]]) {
           const shot = body.plugin.projectile;
           if (shot && !shot.removed) {
-            if (shot.type === 'explosive') this.explode(shot, point);
+            if (other.plugin.barrel) {
+              this.detonateBarrel(other.plugin.barrel);
+              this.removeProjectile(shot);
+            } else if (shot.type === 'explosive') this.explode(shot, point);
+            else if (shot.type === 'sticky') this.attachSticky(shot, other, point);
             else if (other.plugin.floor) {
               const floor = other.plugin.floor;
               const reducedMass = body.mass * other.mass / (body.mass + other.mass);
@@ -326,6 +417,22 @@
 
     step() {
       this.time += C.step / 1000;
+      for (const barrel of this.barrels) {
+        if (!barrel.exploded && !barrel.floor.destroyed) Body.setPosition(barrel.body, this.barrelPosition(barrel));
+      }
+      for (const projectile of this.projectiles) {
+        if (projectile.removed) continue;
+        if (projectile.type === 'cluster' && this.time - projectile.born > .72 && projectile.body.position.x > 480) this.splitProjectile(projectile);
+        if (projectile.attached) {
+          const anchor = projectile.attached, floor = anchor.floor;
+          if (floor && !floor.destroyed) {
+            const body = floor.body, cos = Math.cos(body.angle), sin = Math.sin(body.angle);
+            Body.setPosition(projectile.body, { x: body.position.x + anchor.x * cos - anchor.y * sin,
+              y: body.position.y + anchor.x * sin + anchor.y * cos });
+          }
+          if (this.time >= projectile.fuse) this.explode(projectile, projectile.body.position);
+        }
+      }
       for (const body of Composite.allBodies(this.engine.world)) {
         body.plugin.beforeVelocity = { x: body.velocity.x, y: body.velocity.y };
         body.plugin.beforeAngular = body.angularVelocity;
@@ -358,6 +465,7 @@
         const { x, y } = projectile.body.position;
         const age = this.time - projectile.born;
         projectile.resting = projectile.body.speed < .65 ? projectile.resting + C.step / 1000 : 0;
+        if (projectile.attached) continue;
         if (x < -180 || x > C.width + 180 || y > C.height + 180 || y < -900 || age > 12 || (age > .6 && projectile.resting > .65)) this.removeProjectile(projectile);
       }
       this.projectiles = this.projectiles.filter(projectile => !projectile.removed);
@@ -380,6 +488,20 @@
         y += vy * ratio;
         if (y > C.ground - C.ammo[type].radius || x > C.width || x < 0 || y < -150) break;
         if (i % 6 === 0) points.push({ x, y });
+        if (type === 'cluster' && i * C.step / 1000 > .72 && x > 480) {
+          const heading = Math.atan2(vy, vx), velocity = Math.max(12, Math.hypot(vx, vy)) * 1.06;
+          points.branches = [-.13, 0, .13].map(spread => {
+            const branch = [], angle = heading + spread;
+            let bx = x, by = y, bvx = Math.cos(angle) * velocity, bvy = Math.sin(angle) * velocity;
+            for (let j = 0; j < 240; j++) {
+              bvy += acceleration;bx += bvx * ratio;by += bvy * ratio;
+              if (by > C.ground - C.ammo.fragment.radius || bx > C.width || by < -150) break;
+              if (j % 6 === 0) branch.push({ x: bx, y: by });
+            }
+            return branch;
+          });
+          break;
+        }
       }
       return points;
     }

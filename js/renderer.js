@@ -158,12 +158,31 @@
       this.ctx.restore();
     }
 
-    draw(game, elapsed) {
+    drawTarget(width, height) {
+      const ctx=this.ctx;
+      ctx.fillStyle='#b536324a';ctx.fillRect(-width/2+2,-height/2+2,width-4,height-4);
+      ctx.strokeStyle='#d34b42';ctx.lineWidth=3;ctx.strokeRect(-width/2+2,-height/2+2,width-4,height-4);
+      ctx.fillStyle='#fff0df';ctx.font='bold 12px Segoe UI';ctx.textAlign='center';
+      ctx.fillText('ЦЕЛЬ',0,4);ctx.textAlign='left';
+    }
+
+    drawBarrel(barrel) {
+      const ctx=this.ctx;
+      ctx.save();ctx.translate(barrel.x,barrel.y);ctx.rotate(barrel.angle || 0);
+      ctx.drawImage(this.assets.barrel,-19,-20,38,41);
+      ctx.restore();
+    }
+
+    beginWorld() {
       const ctx=this.ctx,dpr=this.pixelRatio;
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.drawImage(this.backdrop,0,0);
+      ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(this.backdrop,0,0);
       ctx.setTransform(dpr,0,0,dpr,0,0);
       ctx.translate(this.offsetX,this.offsetY);ctx.scale(this.scale,this.scale);
+    }
+
+    draw(game, elapsed) {
+      const ctx=this.ctx;
+      this.beginWorld();
       if(game.state==='ready'&&!game.hasFired){
         ctx.font='11px Segoe UI';ctx.fillStyle='#71847c';ctx.textAlign='center';
         ctx.fillText('РАЗРУШЕНИЕ · КРЕН 45° · ВЫЛЕТ ЗА ГРАНИЦЫ = ЭТАЖ ВЫВЕДЕН ИЗ СТРОЯ',770,73);
@@ -174,8 +193,11 @@
         ctx.save();ctx.translate(floor.body.position.x,floor.body.position.y);ctx.rotate(floor.body.angle);
         ctx.globalAlpha=Math.min(1,game.physics.time/.55);
         ctx.drawImage(this.textures.get(floor.id),-floor.width/2,-floor.height/2,floor.width,floor.height);
+        if(floor.target)this.drawTarget(floor.width,floor.height);
         ctx.restore();
       }
+      for(const barrel of game.physics.barrels)if(!barrel.exploded)this.drawBarrel({
+        x:barrel.body.position.x,y:barrel.body.position.y,angle:barrel.floor.body.angle });
       if(game.aim&&game.aim.valid){
         const key=`${game.selected}:${game.angle.toFixed(3)}:${game.power.toFixed(2)}`;
         if(!this.cachedTrajectory||this.cachedTrajectory.key!==key){
@@ -186,6 +208,12 @@
           ctx.fillStyle=`rgba(44,68,64,${.76*(1-i/points.length)+.1})`;
           ctx.beginPath();ctx.arc(point.x,point.y,i%4===0?3:2,0,Math.PI*2);ctx.fill();
         });
+        for(const branch of points.branches||[]){
+          branch.forEach((point,i)=>{
+            ctx.fillStyle=`rgba(51,85,80,${.5*(1-i/branch.length)+.08})`;
+            ctx.beginPath();ctx.arc(point.x,point.y,1.8,0,Math.PI*2);ctx.fill();
+          });
+        }
         const {start,current}=game.aim;
         ctx.strokeStyle='#46645f9e';ctx.lineWidth=1.5;
         ctx.beginPath();ctx.arc(start.x,start.y,5,0,Math.PI*2);ctx.stroke();
@@ -197,6 +225,32 @@
       for(const projectile of game.physics.projectiles)this.drawProjectile(projectile);
       this.particles.update(elapsed);
       this.particles.draw(ctx);
+    }
+
+    drawReplay(data) {
+      this.beginWorld();
+      const ctx=this.ctx,frame=data.frame;
+      for(const floor of frame.floors){
+        if(floor.destroyed)continue;
+        const image=data.images.get(floor.id);
+        if(!image)continue;
+        ctx.save();ctx.translate(floor.x,floor.y);ctx.rotate(floor.angle);
+        ctx.drawImage(image,-image.width/4,-image.height/4,image.width/2,image.height/2);
+        if(floor.target)this.drawTarget(image.width/2,image.height/2);
+        ctx.restore();
+      }
+      for(const barrel of frame.barrels)this.drawBarrel(barrel);
+      this.drawCannon(frame.angle,0);
+      for(const shot of frame.projectiles){
+        const image=this.assets.projectiles.get(shot.type);
+        if(!image)continue;
+        ctx.save();ctx.translate(shot.x,shot.y);ctx.rotate(shot.angle);
+        ctx.drawImage(image,-shot.radius-2,-shot.radius-2,shot.radius*2+4,shot.radius*2+4);ctx.restore();
+      }
+      ctx.fillStyle='#142426be';ctx.fillRect(0,0,C.width,34);ctx.fillRect(0,C.height-43,C.width,43);
+      ctx.fillStyle='#f1e7cf';ctx.font='bold 14px Segoe UI';ctx.fillText('ПОВТОР  ·  0,45×',35,23);
+      ctx.font='12px Segoe UI';ctx.fillText(`${Math.round(data.progress*100)}%`,C.width-73,23);
+      ctx.fillStyle='#d9b779';ctx.fillRect(35,C.height-16,(C.width-70)*data.progress,3);
     }
   }
   Towers.Renderer=Renderer;

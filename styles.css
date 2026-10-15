@@ -27,3 +27,19 @@
 @media(max-width:1000px){.sound-panel{flex-basis:142px;padding-left:10px}.instructions{min-width:198px}.volume-row input{width:85px}}
 @media(max-width:760px){.sound-panel{flex:1 0 100%;flex-direction:row;justify-content:center;align-items:center;border-left:0;border-top:1px solid #405153;padding:9px 0 0;gap:12px}.sound-panel label{margin-left:auto}.volume-row{margin-right:auto}.volume-row input{width:90px}.controls{gap:8px}}
 @media(max-width:450px){.sound-panel{gap:8px}.sound-toggle{font-size:9px}.sound-panel label{font-size:8px}.volume-row input{width:67px}}
+
+/* Mission variants and the optional in-field replay control. */
+.ammo-section{max-width:1000px}
+.ammo-list{gap:7px}
+.ammo{padding:10px 9px;gap:7px}
+.ammo>span{font-size:11px}
+.ammo small{font-size:8px;white-space:normal;line-height:1.2}
+.ball.cluster{background:radial-gradient(circle at 31% 23%,#d9e0df,#50777c 55%,#223d43);border-color:#87abb0}
+.ball.sticky{background:radial-gradient(circle at 35% 25%,#d7d1b6,#777460 50%,#2c3031);border-color:#d5705f}
+.replay-button{position:absolute;top:45px;right:20px;z-index:3;padding:10px 14px;background:#263a3be8;border:1px solid #d8b575;border-radius:5px;color:#f2e7cc;font-size:11px;letter-spacing:.4px;box-shadow:0 4px 15px #263a3b32}
+.replay-button:hover{background:#354b4b}
+.target strong{font-size:23px;white-space:nowrap}
+#objective{font-size:9px;letter-spacing:.5px}
+@media(max-width:1100px){.controls{flex-wrap:wrap}.ammo-section{max-width:none;flex-basis:100%}.sound-panel{flex:0 0 150px}.instructions{flex:1}}
+@media(max-width:760px){.ammo-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.ammo{min-height:49px;padding:8px 6px}.ammo>span{font-size:10px}.ammo small{font-size:8px}.ammo b{font-size:15px}.controls{min-height:0}.replay-button{top:35px;right:12px;padding:8px 10px;font-size:10px}.target strong{font-size:18px}}
+@media(max-width:450px){.ammo>span{font-size:9px}.ammo small{font-size:7px}.ball{width:17px;height:17px}.ball.heavy{width:20px;height:20px}.field-bottom #objective{font-size:8px;max-width:60%}}

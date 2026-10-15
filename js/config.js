@@ -14,7 +14,10 @@
     ammo: {
       normal: { radius: 13, mass: 22, count: 3 },
       heavy: { radius: 17, mass: 62, count: 2 },
-      explosive: { radius: 14, mass: 25, count: 1 }
+      explosive: { radius: 14, mass: 25, count: 1 },
+      cluster: { radius: 13, mass: 23, count: 1 },
+      sticky: { radius: 14, mass: 27, count: 1 },
+      fragment: { radius: 8, mass: 7, count: 0 }
     }
   });
   Towers.clamp = (value, min, max) => Math.max(min, Math.min(max, value));

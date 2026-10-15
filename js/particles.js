@@ -13,6 +13,11 @@
       if(effect.type==='break')this.break(effect);
       else if(effect.type==='explosion')this.explosion(effect);
       else if(effect.type==='impact')this.impact(effect);
+      else if(effect.type==='split'){
+        this.flash(effect.x,effect.y,16,.12,'impact');
+        for(let i=0;i<12;i++)this.piece('spark',effect.x,effect.y,(Math.random()-.5)*115,(Math.random()-.5)*100,2,.18);
+      }
+      else if(effect.type==='attach')this.flash(effect.x,effect.y,10,.14,'impact');
       else if(effect.type==='muzzle'){
         this.flash(effect.x,effect.y,26,.14,'muzzle');
         for(let i=0;i<9;i++){

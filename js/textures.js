@@ -33,7 +33,8 @@
       for (const material of ['wood', 'concrete', 'glass']) {
         for (let variant = 0; variant < 4; variant++) this.tiles.set(`${material}:${variant}`, this.makeTile(material, variant));
       }
-      for (const type of ['normal', 'heavy', 'explosive']) this.projectiles.set(type, this.makeProjectile(type));
+      for (const type of ['normal', 'heavy', 'explosive', 'cluster', 'sticky', 'fragment']) this.projectiles.set(type, this.makeProjectile(type));
+      this.barrel = this.makeBarrel();
     }
 
     makeTile(material, variant) {
@@ -186,7 +187,10 @@
     makeProjectile(type) {
       const radius = Towers.config.ammo[type].radius, size=radius*2+4;
       const canvas=makeCanvas(size*2,size*2),ctx=canvas.getContext('2d');ctx.scale(2,2);ctx.translate(radius+2,radius+2);
-      const colors=type==='normal'?['#c3cac7','#697a7b','#223941']:type==='heavy'?['#a2a8a3','#4b5556','#17282c']:['#e3cc9c','#8c7048','#2f3433'];
+      const colors=type==='normal'||type==='fragment'?['#c3cac7','#697a7b','#223941']:
+        type==='heavy'?['#a2a8a3','#4b5556','#17282c']:
+        type==='cluster'?['#b8c4c4','#627c7e','#253e46']:
+        type==='sticky'?['#c2bb9b','#716d58','#282e2e']:['#e3cc9c','#8c7048','#2f3433'];
       const steel=ctx.createRadialGradient(-radius*.38,-radius*.45,1,0,0,radius);
       steel.addColorStop(0,colors[0]);steel.addColorStop(.3,colors[1]);steel.addColorStop(1,colors[2]);
       ctx.fillStyle=steel;ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.fill();
@@ -195,12 +199,34 @@
         ctx.strokeStyle='#d2d5c398';ctx.lineWidth=2.1;
         ctx.beginPath();ctx.ellipse(0,0,radius*.5,radius-2,-.22,0,TAU);ctx.stroke();
         for(let a=0;a<TAU;a+=TAU/6){ctx.fillStyle='#afb7ae';ctx.beginPath();ctx.arc(Math.cos(a)*radius*.68,Math.sin(a)*radius*.68,1.25,0,TAU);ctx.fill();}
-      } else if(type==='explosive'){
+      } else if(type==='explosive'||type==='sticky'){
         ctx.strokeStyle='#3d4b49';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,0,radius*.53,radius-2,-.3,0,TAU);ctx.stroke();
         ctx.fillStyle='#e0b974';ctx.fillRect(-radius*.2,-radius*.83,radius*.42,2.2);
+        if(type==='sticky'){
+          ctx.fillStyle='#d35d4d';ctx.beginPath();ctx.arc(0,0,radius*.24,0,TAU);ctx.fill();
+          ctx.strokeStyle='#bfc7ac';ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(0,0,radius*.64,.3,2.8);ctx.stroke();
+        }
+      } else if(type==='cluster'){
+        for(const [x,y] of [[-4,-3],[4,-2],[0,5]]){
+          ctx.fillStyle='#d7e1d8';ctx.beginPath();ctx.arc(x,y,2.2,0,TAU);ctx.fill();
+        }
       } else {
         ctx.strokeStyle='#2e464c75';ctx.lineWidth=.75;ctx.beginPath();ctx.arc(0,0,radius-3,.35,2.8);ctx.stroke();
       }
+      return canvas;
+    }
+
+    makeBarrel() {
+      const canvas=makeCanvas(76,82),ctx=canvas.getContext('2d');
+      ctx.scale(2,2);
+      const metal=ctx.createLinearGradient(3,0,35,0);
+      metal.addColorStop(0,'#492e28');metal.addColorStop(.2,'#ad5140');
+      metal.addColorStop(.5,'#b95c48');metal.addColorStop(.8,'#6e302a');metal.addColorStop(1,'#322d2c');
+      ctx.fillStyle=metal;ctx.beginPath();ctx.roundRect(4,4,30,34,5);ctx.fill();
+      ctx.strokeStyle='#d19168';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(19,5,14,3,0,0,TAU);ctx.stroke();
+      ctx.fillStyle='#283431';ctx.fillRect(4,10,30,3);ctx.fillRect(4,30,30,4);
+      ctx.fillStyle='#d9ad7b';ctx.font='bold 12px Segoe UI';ctx.textAlign='center';ctx.fillText('⚠',19,26);
+      ctx.strokeStyle='#301f1d';ctx.lineWidth=1;ctx.strokeRect(5,5,28,32);
       return canvas;
     }
 
