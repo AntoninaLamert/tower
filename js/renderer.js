@@ -16,6 +16,8 @@
       this.assets = new Towers.Textures();
       this.particles = new Towers.Particles();
       this.textures = new Map();
+      this.wallTextures = new Map();
+      this.editorTextures = new Map();
       this.recoil = 0;
       this.background = this.makeBackground();
       this.backdrop = null;
@@ -132,10 +134,18 @@
       return canvas;
     }
 
-    prepare(floors) {
+    prepare(floors, physics) {
       this.textures.clear(); this.assets.clearFaces(); this.particles.clear();
+      this.wallTextures.clear();
       this.towerFade = 0;
       for (const floor of floors) this.textures.set(floor.id, this.assets.block(floor));
+      for (const wall of physics?.walls || []) this.wallTextures.set(wall.seed,
+        this.assets.block({ material: 'concrete', width: wall.width, height: wall.height, seed: wall.seed }));
+    }
+
+    prepareEditor(editor) {
+      this.editorTextures.clear();
+      for (const block of editor.positions()) this.editorTextures.set(block.id, this.assets.block(block));
     }
 
     effect(effect) { this.particles.spawn(effect); }
@@ -173,6 +183,28 @@
       ctx.restore();
     }
 
+    drawObstacles(physics) {
+      const ctx=this.ctx;
+      for(const support of physics.supports){
+        ctx.drawImage(this.assets.support,support.position.x-21,support.position.y-39,42,78);
+      }
+      if(physics.cargo&&!physics.cargo.broken){
+        const body=physics.cargo.body;
+        ctx.drawImage(this.assets.cargo,body.position.x-33,body.position.y-26,66,52);
+      }
+      for(const wall of physics.walls){
+        if(wall.destroyed)continue;
+        const body=wall.body,image=this.wallTextures.get(wall.seed);
+        ctx.save();ctx.translate(body.position.x,body.position.y);ctx.rotate(body.angle);
+        ctx.drawImage(image,-wall.width/2,-wall.height/2,wall.width,wall.height);ctx.restore();
+      }
+      for(const mover of physics.movers){
+        ctx.save();ctx.translate(mover.body.position.x,mover.body.position.y);
+        ctx.drawImage(this.assets.mover,0,0,mover.width*2,48,-mover.width/2,-12,mover.width,24);
+        ctx.restore();
+      }
+    }
+
     beginWorld() {
       const ctx=this.ctx,dpr=this.pixelRatio;
       ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(this.backdrop,0,0);
@@ -188,6 +220,7 @@
         ctx.fillText('РАЗРУШЕНИЕ · КРЕН 45° · ВЫЛЕТ ЗА ГРАНИЦЫ = ЭТАЖ ВЫВЕДЕН ИЗ СТРОЯ',770,73);
         ctx.textAlign='left';
       }
+      this.drawObstacles(game.physics);
       for(const floor of game.physics.floors){
         if(floor.destroyed)continue;
         ctx.save();ctx.translate(floor.body.position.x,floor.body.position.y);ctx.rotate(floor.body.angle);
@@ -230,6 +263,17 @@
     drawReplay(data) {
       this.beginWorld();
       const ctx=this.ctx,frame=data.frame;
+      for(const support of frame.supports)ctx.drawImage(this.assets.support,support.x-21,support.y-39,42,78);
+      if(frame.cargo)ctx.drawImage(this.assets.cargo,frame.cargo.x-33,frame.cargo.y-26,66,52);
+      for(const wall of frame.walls){
+        const image=data.wallImages.get(wall.seed);
+        if(!image)continue;
+        ctx.save();ctx.translate(wall.x,wall.y);ctx.rotate(wall.angle);
+        ctx.drawImage(image,-wall.width/2,-wall.height/2,wall.width,wall.height);ctx.restore();
+      }
+      for(const mover of frame.movers){
+        ctx.drawImage(this.assets.mover,0,0,mover.width*2,48,mover.x-mover.width/2,mover.y-12,mover.width,24);
+      }
       for(const floor of frame.floors){
         if(floor.destroyed)continue;
         const image=data.images.get(floor.id);
@@ -251,6 +295,30 @@
       ctx.fillStyle='#f1e7cf';ctx.font='bold 14px Segoe UI';ctx.fillText('ПОВТОР  ·  0,45×',35,23);
       ctx.font='12px Segoe UI';ctx.fillText(`${Math.round(data.progress*100)}%`,C.width-73,23);
       ctx.fillStyle='#d9b779';ctx.fillRect(35,C.height-16,(C.width-70)*data.progress,3);
+    }
+
+    drawEditor(editor) {
+      this.beginWorld();
+      const ctx=this.ctx;
+      ctx.fillStyle='#344e496e';ctx.fillRect(C.zone.left,C.ground-1,C.zone.right-C.zone.left,3);
+      ctx.setLineDash([6,8]);ctx.strokeStyle='#55756a96';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(C.towerX,110);ctx.lineTo(C.towerX,C.ground);ctx.stroke();ctx.setLineDash([]);
+      for(const block of editor.positions()){
+        const image=this.editorTextures.get(block.id);
+        if(image)ctx.drawImage(image,block.x-block.width/2,block.y-block.height/2,block.width,block.height);
+      }
+      const preview=editor.preview();
+      if(preview){
+        ctx.fillStyle={wood:'#ae8b6488',glass:'#9bd9df88',concrete:'#8e9f9988'}[preview.material];
+        ctx.fillRect(preview.x-preview.width/2,preview.y-preview.height/2,preview.width,preview.height);
+        ctx.strokeStyle='#fff3cf';ctx.lineWidth=2;
+        ctx.strokeRect(preview.x-preview.width/2,preview.y-preview.height/2,preview.width,preview.height);
+      }
+      ctx.fillStyle='#506963';ctx.font='12px Segoe UI';ctx.textAlign='center';
+      ctx.fillText(editor.blocks.length ? `${editor.blocks.length} плит · высота ${editor.heightUsed()} px` :
+        'Первая плита встанет на землю. Следующие размещаются сверху.',C.towerX,85);
+      ctx.textAlign='left';
+      this.drawCannon(-.48,0);
     }
   }
   Towers.Renderer=Renderer;

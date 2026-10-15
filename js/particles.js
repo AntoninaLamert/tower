@@ -11,6 +11,12 @@
     }
     spawn(effect){
       if(effect.type==='break')this.break(effect);
+      else if(effect.type==='wall-break'){
+        for(let i=0;i<24;i++)this.piece(i%3?'stone':'dust',effect.x+(Math.random()-.5)*effect.width,
+          effect.y+(Math.random()-.5)*effect.height,(Math.random()-.5)*190,-35-Math.random()*135,
+          3+Math.random()*9,.35+Math.random()*.55);
+        this.flash(effect.x,effect.y,25,.13,'impact');
+      }
       else if(effect.type==='explosion')this.explosion(effect);
       else if(effect.type==='impact')this.impact(effect);
       else if(effect.type==='split'){

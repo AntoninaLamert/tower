@@ -6,33 +6,47 @@
 
   // This module owns all Matter bodies. It emits facts, never score or round decisions.
   class Physics {
-    constructor(onFloor, onEffect, onDamage) {
+    constructor(onFloor, onEffect, onDamage, onCargo) {
       this.onFloor = onFloor;
       this.onEffect = onEffect;
       this.onDamage = onDamage;
+      this.onCargo = onCargo;
       this.engine = Engine.create({ enableSleeping: true, positionIterations: 10, velocityIterations: 8 });
       this.engine.gravity.y = 1;
       this.engine.gravity.scale = C.gravity;
       this.floors = [];
       this.projectiles = [];
       this.barrels = [];
+      this.walls = [];
+      this.movers = [];
+      this.supports = [];
+      this.cargo = null;
       this.pending = [];
       this.time = 0;
       this.armed = false;
       Events.on(this.engine, 'collisionStart', event => this.collectImpacts(event.pairs));
     }
 
-    build(number) {
+    build(number, mode = 'demolition') {
       this.armed = false;
+      this.mode = mode;
       let accepted = false;
       for (let attempt = 0; attempt < 8; attempt++) {
-        this.createCandidate(number, false);
+        this.createCandidate(number, false, mode);
         if (this.checkStability()) { accepted = true; break; }
       }
       if (!accepted) {
-        this.createCandidate(number, true);
+        this.createCandidate(number, true, mode);
         this.checkStability();
       }
+      this.finishBuild();
+      if (mode === 'siege') this.createWall(number);
+      if (mode === 'moving') this.createMovers(number);
+      if (mode !== 'precision' && mode !== 'cargo') this.createBarrels(number);
+      return this.floors.length;
+    }
+
+    finishBuild() {
       this.time = 0;
       this.pending.length = 0;
       this.projectiles.length = 0;
@@ -49,21 +63,29 @@
         Body.setAngularVelocity(floor.body, 0);
         Sleeping.set(floor.body, false);
       }
-      this.createBarrels(number);
-      return this.floors.length;
     }
 
-    createCandidate(number, fallback) {
+    resetWorld(mode = 'demolition') {
       Composite.clear(this.engine.world, false);
       Engine.clear(this.engine);
       this.floors = [];
       this.projectiles = [];
       this.barrels = [];
+      this.walls = [];
+      this.movers = [];
+      this.supports = [];
+      this.cargo = null;
       const ground = Bodies.rectangle(C.width / 2, C.ground + 110, 6000, 220, {
         isStatic: true, friction: .8, restitution: .02, label: 'ground'
       });
       Composite.add(this.engine.world, ground);
-      const available = C.ground - 115;
+      if (mode === 'cargo') this.createCargoSupports();
+    }
+
+    createCandidate(number, fallback, mode = 'demolition') {
+      this.resetWorld(mode);
+      const baseY = mode === 'cargo' ? C.ground - 78 : C.ground;
+      const available = baseY - 115;
       const count = Math.min(6 + Math.floor((number - 1) / 2), 11, Math.floor(available / 30));
       const maxHeight = Math.max(30, Math.min(100, Math.floor(available / count)));
       const difficulty = Math.min(1, (number - 1) / 14);
@@ -74,7 +96,7 @@
         const j = Math.floor(Math.random() * (i + 1));
         [materials[i], materials[j]] = [materials[j], materials[i]];
       }
-      let bottom = C.ground;
+      let bottom = baseY;
       let previousX = C.towerX;
       for (let i = 0; i < count; i++) {
         const height = Math.round(fallback ? Math.min(55, maxHeight) : random(Math.max(30, maxHeight * .65), maxHeight));
@@ -82,21 +104,94 @@
         const x = fallback ? C.towerX : Towers.clamp(previousX + random(-18 - difficulty * 22, 18 + difficulty * 22), C.towerX - 70, C.towerX + 70);
         const y = bottom - height / 2;
         const material = materials[i];
-        const body = Bodies.rectangle(x, y, width, height, {
-          ...C.materials[material], frictionAir: .003, sleepThreshold: 100,
-          slop: .025, label: 'floor'
-        });
-        const areaFactor = Math.sqrt(width * height / 14000);
-        const thicknessFactor = .8 + .2 * height / 60;
-        const maxHealth = material === 'concrete' ? Infinity :
-          (material === 'wood' ? 1300 : 820) * areaFactor * thicknessFactor;
-        const floor = { id: i, body, material, width, height, maxHealth, damage: 0, disabled: false, destroyed: false,
-          startX: x, startY: y, initialAngle: 0, initialY: y, peakY: y, drop: 0, seed: Math.floor(random(1, 1000000)), assistAt: -10 };
-        body.plugin.floor = floor;
-        Composite.add(this.engine.world, body);
-        this.floors.push(floor);
+        this.addFloor({ x, y, width, height, material, id: i });
         bottom -= height; // Contact surfaces meet; no spacer bodies or visual gaps.
         previousX = x;
+      }
+    }
+
+    addFloor({ x, y, width, height, material, id }) {
+      const body = Bodies.rectangle(x, y, width, height, {
+        ...C.materials[material], frictionAir: .003, sleepThreshold: 100,
+        slop: .025, label: 'floor'
+      });
+      const areaFactor = Math.sqrt(width * height / 14000);
+      const thicknessFactor = .8 + .2 * height / 60;
+      const maxHealth = material === 'concrete' ? Infinity :
+        (material === 'wood' ? 1300 : 820) * areaFactor * thicknessFactor;
+      const floor = { id, body, material, width, height, maxHealth, damage: 0, disabled: false, destroyed: false,
+        startX: x, startY: y, initialAngle: 0, initialY: y, peakY: y, drop: 0,
+        seed: Math.floor(random(1, 1000000)), assistAt: -10 };
+      body.plugin.floor = floor;
+      Composite.add(this.engine.world, body);
+      this.floors.push(floor);
+      return floor;
+    }
+
+    buildCustom(design) {
+      if (!Array.isArray(design) || design.length < 2 || design.length > 11) return false;
+      if (design.some(part => !['wood', 'glass', 'concrete'].includes(part.material) ||
+          !Number.isFinite(part.x) || !Number.isFinite(part.width) || !Number.isFinite(part.height) ||
+          part.x < 980 || part.x > 1180 || part.width < 140 || part.width > 330 ||
+          part.height < 30 || part.height > 100) ||
+          design.reduce((sum, part) => sum + part.height, 0) > C.ground - 115) return false;
+      this.armed = false;
+      this.mode = 'custom';
+      this.resetWorld();
+      let bottom = C.ground;
+      design.forEach((part, id) => {
+        this.addFloor({ x: part.x, y: bottom - part.height / 2, width: part.width,
+          height: part.height, material: part.material, id });
+        bottom -= part.height;
+      });
+      if (!this.checkStability()) return false;
+      this.finishBuild();
+      return true;
+    }
+
+    createCargoSupports() {
+      for (const dx of [-82, 82]) {
+        const body = Bodies.rectangle(C.towerX + dx, C.ground - 39, 42, 78, {
+          isStatic: true, label: 'support', friction: .85
+        });
+        this.supports.push(body);
+        Composite.add(this.engine.world, body);
+      }
+      const body = Bodies.rectangle(C.towerX, C.ground - 28, 66, 52, {
+        isStatic: true, label: 'cargo', friction: .2, restitution: .02
+      });
+      this.cargo = { body, broken: false };
+      Composite.add(this.engine.world, body);
+    }
+
+    createWall(number) {
+      const count = 2 + (number % 4), height = 44;
+      for (let i = 0; i < count; i++) {
+        const width = 88 + (i % 2) * 8;
+        const body = Bodies.rectangle(775, C.ground - height * (i + .5), width, height, {
+          density: .0065, friction: .72, frictionStatic: .9, restitution: .025,
+          frictionAir: .003, sleepThreshold: 90, label: 'wall', slop: .025
+        });
+        const brick = { body, width, height, health: 720 + i * 45, damage: 0,
+          destroyed: false, seed: (number * 1031 + i * 337) >>> 0 };
+        body.plugin.wall = brick;
+        this.walls.push(brick);
+        Composite.add(this.engine.world, body);
+      }
+    }
+
+    createMovers(number) {
+      const count = number >= 10 ? 2 : 1;
+      for (let i = 0; i < count; i++) {
+        const mover = { x: 690 + i * 145, baseY: 445 - i * 65,
+          amplitude: 104 - i * 17, period: 3.2 + i * 1.3, phase: i * 1.7,
+          width: 112 - i * 14, height: 24 };
+        const y = mover.baseY + Math.sin(mover.phase) * mover.amplitude;
+        mover.body = Bodies.rectangle(mover.x, y, mover.width, mover.height, {
+          isStatic: true, label: 'moving', friction: .65, restitution: .05
+        });
+        this.movers.push(mover);
+        Composite.add(this.engine.world, mover.body);
       }
     }
 
@@ -265,6 +360,28 @@
       if (floor.damage >= floor.maxHealth) this.destroy(floor, reason, speed);
     }
 
+    damageWall(wall, amount, speed) {
+      if (wall.destroyed || amount <= 0) return;
+      wall.damage += amount;
+      if (wall.damage < wall.health) return;
+      wall.destroyed = true;
+      const body = wall.body;
+      this.onEffect({ type: 'wall-break', x: body.position.x, y: body.position.y,
+        width: wall.width, height: wall.height, angle: body.angle, strength: speed });
+      Composite.remove(this.engine.world, body);
+      for (const brick of this.walls) if (!brick.destroyed) Sleeping.set(brick.body, false);
+    }
+
+    breakCargo() {
+      if (!this.cargo || this.cargo.broken || !this.armed) return;
+      this.cargo.broken = true;
+      const body = this.cargo.body;
+      this.onEffect({ type: 'break', material: 'glass', x: body.position.x, y: body.position.y,
+        width: 66, height: 52, angle: 0, strength: 10 });
+      Composite.remove(this.engine.world, body);
+      if (this.onCargo) this.onCargo();
+    }
+
     explode(projectile, point) {
       if (projectile.exploded || projectile.removed) return;
       projectile.exploded = true;
@@ -284,6 +401,13 @@
     blast(point, radius, force) {
       this.onEffect({ type: 'explosion', x: point.x, y: point.y, radius });
       this.wakeTower();
+      if (this.cargo && Math.hypot(this.cargo.body.position.x - point.x,
+          this.cargo.body.position.y - point.y) < radius * .7) this.breakCargo();
+      for (const wall of this.walls) {
+        if (wall.destroyed) continue;
+        const distance = Math.hypot(wall.body.position.x - point.x, wall.body.position.y - point.y);
+        if (distance < radius) this.damageWall(wall, wall.health * (1 - distance / radius) * 1.8, 10);
+      }
       for (const floor of this.floors) {
         if (floor.destroyed) continue;
         const body = floor.body;
@@ -314,11 +438,10 @@
 
     attachSticky(projectile, other, point) {
       if (projectile.attached || projectile.removed) return;
-      const floor = other.plugin.floor;
-      if (floor) {
+      if (other.label !== 'barrel') {
         const dx = point.x - other.position.x, dy = point.y - other.position.y;
         const cos = Math.cos(other.angle), sin = Math.sin(other.angle);
-        projectile.attached = { floor, x: cos * dx + sin * dy, y: -sin * dx + cos * dy };
+        projectile.attached = { body: other, x: cos * dx + sin * dy, y: -sin * dx + cos * dy };
       } else projectile.attached = { x: point.x, y: point.y };
       Body.setStatic(projectile.body, true);
       Body.setPosition(projectile.body, point);
@@ -330,6 +453,13 @@
     processImpacts() {
       for (const impact of this.pending) {
         const { a, b, point, speed } = impact;
+        if (this.cargo && !this.cargo.broken &&
+            (a === this.cargo.body || b === this.cargo.body)) {
+          const other = a === this.cargo.body ? b : a;
+          if ((other.plugin.floor && speed >= 3.2) ||
+              (other.plugin.projectile && speed >= 4) ||
+              (other.plugin.wall && speed >= 5)) this.breakCargo();
+        }
         // Visual-only contact notification. Score, forces and destruction remain below.
         if (speed > 2.2) {
           for (const [body, other] of [[a, b], [b, a]]) {
@@ -337,6 +467,10 @@
             if (floor && !floor.destroyed) this.onEffect({ type: 'impact', x: point.x, y: point.y,
               strength: speed, relativeSpeed: speed, mass: body.mass, material: floor.material,
               otherMaterial: other.plugin.floor?.material || other.label, ground: other.label === 'ground', width: floor.width });
+            const wall = body.plugin.wall;
+            if (wall && !wall.destroyed) this.onEffect({ type: 'impact', x: point.x, y: point.y,
+              strength: speed, relativeSpeed: speed, mass: body.mass, material: 'concrete',
+              ground: other.label === 'ground', width: wall.width });
           }
         }
         for (const [body, other] of [[a, b], [b, a]]) {
@@ -347,15 +481,20 @@
               this.removeProjectile(shot);
             } else if (shot.type === 'explosive') this.explode(shot, point);
             else if (shot.type === 'sticky') this.attachSticky(shot, other, point);
-            else if (other.plugin.floor) {
-              const floor = other.plugin.floor;
+            else if (other.plugin.floor || other.plugin.wall) {
               const reducedMass = body.mass * other.mass / (body.mass + other.mass);
               const energy = .5 * reducedMass * speed * speed;
-              this.damageFloor(floor, speed > 3 ? energy * (shot.type === 'heavy' ? 1.16 : 1) : 0, 'direct', speed);
+              const damage = speed > 3 ? energy * (shot.type === 'heavy' ? 1.16 : 1) : 0;
+              if (other.plugin.floor) this.damageFloor(other.plugin.floor, damage, 'direct', speed);
+              else this.damageWall(other.plugin.wall, damage, speed);
             }
           }
         }
         for (const [body, other] of [[a, b], [b, a]]) {
+          if (body.plugin.wall && !body.plugin.wall.destroyed && !other.plugin.projectile && speed > 9) {
+            const reduced = other.isStatic ? body.mass : body.mass * other.mass / (body.mass + other.mass);
+            this.damageWall(body.plugin.wall, .5 * reduced * speed * speed * .42, speed);
+          }
           const floor = body.plugin.floor;
           if (!floor || floor.destroyed || floor.material === 'concrete' || other.plugin.projectile) continue;
           const toppledGlass = floor.material === 'glass' && Math.abs(body.angle - floor.initialAngle) > .45;
@@ -417,6 +556,10 @@
 
     step() {
       this.time += C.step / 1000;
+      for (const mover of this.movers) {
+        const y = mover.baseY + Math.sin(this.time * Math.PI * 2 / mover.period + mover.phase) * mover.amplitude;
+        Body.setPosition(mover.body, { x: mover.x, y }, true);
+      }
       for (const barrel of this.barrels) {
         if (!barrel.exploded && !barrel.floor.destroyed) Body.setPosition(barrel.body, this.barrelPosition(barrel));
       }
@@ -424,9 +567,9 @@
         if (projectile.removed) continue;
         if (projectile.type === 'cluster' && this.time - projectile.born > .72 && projectile.body.position.x > 480) this.splitProjectile(projectile);
         if (projectile.attached) {
-          const anchor = projectile.attached, floor = anchor.floor;
-          if (floor && !floor.destroyed) {
-            const body = floor.body, cos = Math.cos(body.angle), sin = Math.sin(body.angle);
+          const anchor = projectile.attached, body = anchor.body;
+          if (body && !body.plugin.floor?.destroyed && !body.plugin.wall?.destroyed) {
+            const cos = Math.cos(body.angle), sin = Math.sin(body.angle);
             Body.setPosition(projectile.body, { x: body.position.x + anchor.x * cos - anchor.y * sin,
               y: body.position.y + anchor.x * sin + anchor.y * cos });
           }
@@ -442,6 +585,14 @@
         // Keep the apex across the whole flight; do not confuse horizontal motion with a fall.
         floor.peakY = Math.min(floor.peakY, floor.body.position.y);
         floor.drop = Math.max(0, floor.body.position.y - floor.peakY);
+      }
+      for (const wall of this.walls) {
+        if (wall.destroyed) continue;
+        if (wall.body.position.x < -200 || wall.body.position.x > C.width + 200 ||
+            wall.body.position.y > C.height + 180) {
+          wall.destroyed = true;
+          Composite.remove(this.engine.world, wall.body);
+        }
       }
       Engine.update(this.engine, C.step);
       this.processImpacts();
@@ -473,7 +624,9 @@
 
     isQuiet() {
       return this.projectiles.length === 0 && this.floors.every(floor => floor.destroyed ||
-        (floor.body.speed < .32 && Math.abs(floor.body.angularVelocity) < .012));
+        (floor.body.speed < .32 && Math.abs(floor.body.angularVelocity) < .012)) &&
+        this.walls.every(wall => wall.destroyed ||
+          (wall.body.speed < .4 && Math.abs(wall.body.angularVelocity) < .015));
     }
 
     // Same timestep, acceleration and zero air drag as the real projectile integrator.

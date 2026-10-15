@@ -14,6 +14,7 @@
   <script defer src="js/particles.js"></script>
   <script defer src="js/renderer.js"></script>
   <script defer src="js/replay.js"></script>
+  <script defer src="js/editor.js"></script>
   <script defer src="js/game.js"></script>
 </head>
 <body>
@@ -29,9 +30,30 @@
     </section>
     <section class="field" id="field" aria-label="Игровое поле">
       <canvas id="game" tabindex="0" aria-label="Пушка слева, башня справа. Зажмите кнопку мыши и ведите вправо-вверх для прицеливания, отпустите для выстрела."></canvas>
-      <div class="field-caption"><span>ИСПЫТАТЕЛЬНЫЙ ПОЛИГОН</span><span id="field-note">Шесть выстрелов. Одна цель.</span></div>
+      <div class="field-caption"><span>ИСПЫТАТЕЛЬНЫЙ ПОЛИГОН</span><span id="field-note">Восемь выстрелов. Одна цель.</span><button id="editor-open" class="editor-open" type="button">Редактор уровней ↗</button></div>
       <div id="notice" class="notice" role="status" aria-live="polite"></div>
       <button id="replay" class="replay-button" type="button" hidden>↺ Повтор 0,45×</button>
+      <div id="editor-panel" class="editor-panel" hidden>
+        <div class="editor-head"><span class="eyebrow">КОНСТРУКТОР</span><button id="editor-back" type="button">← К игре</button></div>
+        <h2>Свой уровень</h2>
+        <p>Нажмите на поле у башни и потяните в сторону: так задаётся длина. Плиты укладываются снизу вверх.</p>
+        <div class="editor-palette" role="group" aria-label="Материал плиты">
+          <button type="button" data-material="wood" class="selected">Дерево</button>
+          <button type="button" data-material="glass">Стекло</button>
+          <button type="button" data-material="concrete">Бетон</button>
+        </div>
+        <label class="editor-thickness" for="editor-height">Толщина <output id="editor-height-value">56 px</output></label>
+        <input id="editor-height" type="range" min="30" max="100" value="56">
+        <div class="editor-actions">
+          <button id="editor-undo" type="button">Удалить плиту</button>
+          <button id="editor-clear" type="button">Очистить</button>
+          <button id="editor-check" type="button">Проверить устойчивость</button>
+          <button id="editor-save" type="button">Сохранить</button>
+          <button id="editor-load" type="button">Загрузить</button>
+          <button id="editor-play" class="editor-play" type="button">Испытать пушкой ↗</button>
+        </div>
+        <p id="editor-message" class="editor-message" role="status" aria-live="polite"></p>
+      </div>
       <div id="defeat" class="defeat" hidden><div><span id="defeat-label" class="eyebrow">БОЕКОМПЛЕКТ ИСЧЕРПАН</span><h2 id="defeat-heading">Башня устояла</h2><p id="defeat-detail"></p><button id="restart">Начать заново <span aria-hidden="true">↗</span></button></div></div>
       <div class="field-bottom"><span id="objective">Выведите из строя 70% этажей</span><span id="aim-readout">ГОТОВО К ВЫСТРЕЛУ</span></div>
     </section>

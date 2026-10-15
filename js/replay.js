@@ -32,6 +32,14 @@
           target: !!floor.target })),
         barrels: physics.barrels.filter(barrel => !barrel.exploded).map(barrel => ({
           x: barrel.body.position.x, y: barrel.body.position.y, angle: barrel.floor.body.angle })),
+        supports: physics.supports.map(body => ({ x: body.position.x, y: body.position.y })),
+        cargo: physics.cargo && !physics.cargo.broken ?
+          { x: physics.cargo.body.position.x, y: physics.cargo.body.position.y } : null,
+        walls: physics.walls.filter(wall => !wall.destroyed).map(wall => ({
+          x: wall.body.position.x, y: wall.body.position.y, angle: wall.body.angle,
+          width: wall.width, height: wall.height, seed: wall.seed })),
+        movers: physics.movers.map(mover => ({
+          x: mover.body.position.x, y: mover.body.position.y, width: mover.width })),
         projectiles: physics.projectiles.filter(shot => !shot.removed).map(shot => ({
           x: shot.body.position.x, y: shot.body.position.y, angle: shot.body.angle,
           radius: shot.radius, type: shot.type }))
@@ -43,7 +51,7 @@
     offer(renderer, since) {
       const frames = this.frames.filter(frame => frame.time >= since);
       if (frames.length < 10) return false;
-      this.clip = { frames, images: new Map(renderer.textures) };
+      this.clip = { frames, images: new Map(renderer.textures), wallImages: new Map(renderer.wallTextures) };
       return true;
     }
 
@@ -68,7 +76,7 @@
       }
       const progress = Math.min(1, this.playhead / Math.max(.01, frames[frames.length - 1].time - start));
       if (progress >= 1) this.playing = false;
-      return { frame: frames[low], images: this.clip.images, progress };
+      return { frame: frames[low], images: this.clip.images, wallImages: this.clip.wallImages, progress };
     }
   }
   Towers.Replay = Replay;

@@ -180,6 +180,10 @@
       else if(effect.type==='explosion')this.explosion(effect);
       else if(effect.type==='split')this.noise('air',.09,.13,'bandpass',1100,effect.x);
       else if(effect.type==='attach')this.noise('grit',.13,.1,'bandpass',560,effect.x);
+      else if(effect.type==='wall-break'){
+        this.noise('rumble',.23,.29,'lowpass',220,effect.x,true);
+        this.noise('grit',.18,.18,'bandpass',590,effect.x);
+      }
     }
 
     loop(kind,id,x,filterType,frequency) {

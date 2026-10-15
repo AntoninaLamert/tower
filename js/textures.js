@@ -30,6 +30,9 @@
       this.projectiles = new Map();
       this.cannon = this.makeCannon();
       this.barrel = this.makeBarrel();
+      this.cargo = this.makeCargo();
+      this.support = this.makeSupport();
+      this.mover = this.makeMover();
       for (const material of ['wood', 'concrete', 'glass']) {
         for (let variant = 0; variant < 4; variant++) this.tiles.set(`${material}:${variant}`, this.makeTile(material, variant));
       }
@@ -227,6 +230,45 @@
       ctx.fillStyle='#283431';ctx.fillRect(4,10,30,3);ctx.fillRect(4,30,30,4);
       ctx.fillStyle='#d9ad7b';ctx.font='bold 12px Segoe UI';ctx.textAlign='center';ctx.fillText('⚠',19,26);
       ctx.strokeStyle='#301f1d';ctx.lineWidth=1;ctx.strokeRect(5,5,28,32);
+      return canvas;
+    }
+
+    makeCargo() {
+      const canvas=makeCanvas(132,104),ctx=canvas.getContext('2d');ctx.scale(2,2);
+      const pane=ctx.createLinearGradient(0,0,66,52);
+      pane.addColorStop(0,'#e9ffff80');pane.addColorStop(.5,'#8bc6d68a');pane.addColorStop(1,'#d9f5f9a0');
+      ctx.fillStyle=pane;ctx.fillRect(3,3,60,46);
+      ctx.strokeStyle='#edffff';ctx.lineWidth=2.2;ctx.strokeRect(3,3,60,46);
+      ctx.strokeStyle='#5c9aaa';ctx.lineWidth=3;ctx.strokeRect(5,5,56,42);
+      ctx.strokeStyle='#ffffffa9';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(13,7);ctx.lineTo(30,45);ctx.moveTo(35,7);ctx.lineTo(48,45);ctx.stroke();
+      ctx.fillStyle='#415d5e';ctx.fillRect(8,38,50,5);
+      ctx.fillStyle='#f3f7eb';ctx.font='bold 9px Segoe UI';ctx.textAlign='center';ctx.fillText('ХРУПКО',33,35);
+      return canvas;
+    }
+
+    makeSupport() {
+      const canvas=makeCanvas(84,156),ctx=canvas.getContext('2d');ctx.scale(2,2);
+      const gradient=ctx.createLinearGradient(0,0,42,78);
+      gradient.addColorStop(0,'#c9ccc0');gradient.addColorStop(.5,'#929f97');gradient.addColorStop(1,'#596b65');
+      ctx.fillStyle=gradient;ctx.fillRect(0,0,42,78);
+      ctx.fillStyle='#e0e4d1';ctx.fillRect(0,0,42,4);
+      ctx.fillStyle='#51635a';ctx.fillRect(35,3,7,75);
+      ctx.strokeStyle='#354a4188';ctx.strokeRect(.5,.5,41,77);
+      return canvas;
+    }
+
+    makeMover() {
+      const canvas=makeCanvas(224,48),ctx=canvas.getContext('2d');ctx.scale(2,2);
+      const gradient=ctx.createLinearGradient(0,0,0,24);
+      gradient.addColorStop(0,'#d0d8d0');gradient.addColorStop(.3,'#657f80');gradient.addColorStop(.8,'#3a585e');gradient.addColorStop(1,'#233a41');
+      ctx.fillStyle=gradient;ctx.fillRect(0,0,112,24);
+      ctx.fillStyle='#e3ede2';ctx.fillRect(2,2,108,2);
+      ctx.fillStyle='#253a3c';ctx.fillRect(0,19,112,5);
+      for(let x=10;x<112;x+=22){
+        ctx.fillStyle='#d4ba81';ctx.fillRect(x,9,9,3);
+        ctx.fillStyle='#263b3c';ctx.beginPath();ctx.arc(x+4,15,2,0,TAU);ctx.fill();
+      }
+      ctx.strokeStyle='#ced8cc';ctx.strokeRect(.5,.5,111,23);
       return canvas;
     }
 
